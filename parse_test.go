@@ -28,11 +28,11 @@ func TestParsePrometheus(t *testing.T) {
 		},
 		"leading space": {
 			input: ` foo{} 1`,
-			err:   true,
+			obs:   observation{Name: "foo", Value: fp(1.00), Labels: map[string]string{}},
 		},
 		"trailing space": {
 			input: `foo{} 1 `,
-			err:   true,
+			obs:   observation{Name: "foo", Value: fp(1.00), Labels: map[string]string{}},
 		},
 		"ascii value": {
 			input: `foo{} A`,

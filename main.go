@@ -227,12 +227,13 @@ func parseLine(p []byte) (o observation, err error) {
 }
 
 func prometheusUnmarshal(p []byte, o *observation) error {
+	p = bytes.TrimSpace(p)
 	x := bytes.LastIndexByte(p, ' ')
 	if x < 1 {
 		return fmt.Errorf("bad format: couldn't find space")
 	}
 
-	id, val := p[:x], p[x+1:]
+	id, val := bytes.TrimSpace(p[:x]), bytes.TrimSpace(p[x+1:])
 
 	value, err := strconv.ParseFloat(string(val), 64)
 	if err != nil {
@@ -248,6 +249,10 @@ func prometheusUnmarshal(p []byte, o *observation) error {
 	}
 
 	name, labels := id[:y], id[y+1:len(id)-1]
+	if bytes.ContainsRune(labels, ' ') {
+		return fmt.Errorf("bad format: ")
+	}
+
 	labelmap := map[string]string{}
 	for _, pair := range bytes.Split(labels, []byte(",")) {
 		z := bytes.IndexByte(pair, '=')
