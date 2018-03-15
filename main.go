@@ -323,14 +323,22 @@ func (h *histogram) observe(o observation) error {
 
 func (h *histogram) render() string {
 	var sb strings.Builder
-	labels := h.labels
-	for _, b := range h.buckets {
-		labels["le"] = fmt.Sprint(b.max)
-		fmt.Fprintf(&sb, "%s%s %d\n", h.name(), renderLabels(labels), b.count)
+	{
+		// Render all of the individual buckets,
+		// including a terminal +Inf bucket.
+		labels := h.labels
+		for _, b := range h.buckets {
+			labels["le"] = fmt.Sprint(b.max)
+			fmt.Fprintf(&sb, "%s%s %d\n", h.name(), renderLabels(labels), b.count)
+		}
+		labels["le"] = "+Inf"
+		fmt.Fprintf(&sb, "%s%s %f\n", h.name(), renderLabels(labels), h.sum)
 	}
-	labels["le"] = "+Inf"
-	fmt.Fprintf(&sb, "%s_sum%s %f\n", h.name(), renderLabels(labels), h.sum)
-	fmt.Fprintf(&sb, "%s_count%s %d\n", h.name(), renderLabels(labels), h.count)
+	{
+		// Render the aggregate statistics.
+		fmt.Fprintf(&sb, "%s_sum%s %f\n", h.name(), renderLabels(h.labels), h.sum)
+		fmt.Fprintf(&sb, "%s_count%s %d\n", h.name(), renderLabels(h.labels), h.count)
+	}
 	return sb.String()
 }
 
