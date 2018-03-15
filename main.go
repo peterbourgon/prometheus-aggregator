@@ -389,8 +389,8 @@ func (u *universe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	for _, n := range sortMetricNames(u.collections) {
 		c := u.collections[n]
-		fmt.Fprintf(w, "# TYPE %s %s\n", n, c.typ)
 		fmt.Fprintf(w, "# HELP %s %s\n", n, c.help)
+		fmt.Fprintf(w, "# TYPE %s %s\n", n, c.typ)
 		for _, k := range sortTimeseriesKeys(c.values) {
 			v := c.values[k]
 			fmt.Fprintf(w, v.renderText())
