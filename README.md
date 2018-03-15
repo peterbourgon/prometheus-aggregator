@@ -24,7 +24,7 @@ Related work:
 ## Getting
 
 [Download the latest release][release] if you're lazy, or build it yourself from
-latest laster if you have the Go toolchain installed and have YOLO tattooed on
+latest master if you have the Go toolchain installed and have YOLO tattooed on
 your knuckles or whatever.
 
 [release]: https://github.com/peterbourgon/prometheus-aggregator/releases/latest
