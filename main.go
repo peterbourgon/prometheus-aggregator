@@ -105,7 +105,7 @@ func main() {
 	var u *universe
 	{
 		var err error
-		u, err = newUniverse(initial)
+		u, err = newUniverse(initial...)
 		if err != nil {
 			level.Error(logger).Log("err", err)
 			os.Exit(1)
@@ -311,7 +311,7 @@ type (
 	}
 )
 
-func newUniverse(initial []observation) (*universe, error) {
+func newUniverse(initial ...observation) (*universe, error) {
 	u := &universe{
 		collections: map[metricName]*timeseriesCollection{},
 	}
