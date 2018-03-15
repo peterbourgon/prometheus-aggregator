@@ -46,6 +46,8 @@ You can delare a metric without making an observation by omitting the value.
 You can declare metrics at runtime, like this, or you can predeclare metrics in
 a JSON file, and pass it to the program at startup. Or mix and match both.
 
+—
+
 If serializing JSON is a bottleneck, you can optionally emit observations (but
 not declarations) in the [Prometheus exposition format][pef].
 
