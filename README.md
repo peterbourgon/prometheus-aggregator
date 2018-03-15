@@ -1,4 +1,4 @@
-# Prometheus metrics aggregator
+# Prometheus metrics aggregator [![Latest Release](https://img.shields.io/github/release/peterbourgon/prometheus-aggregator.svg?style=flat-square)](https://github.com/peterbourgon/prometheus-aggregator/releases/latest) [![Travis CI](https://travis-ci.org/peterbourgon/prometheus-aggregator.svg?branch=master)](https://travis-ci.org/peterbourgon/prometheus-aggregator) 
 
 Receive and aggregate metrics for consumption by a Prometheus server.
 
@@ -17,6 +17,8 @@ difficult or impossible to get Prometheus to scrape.
 [Download the latest release][release] if you're lazy, or build it yourself from
 latest laster if you have the Go toolchain installed and have YOLO tattooed on
 your knuckles or whatever.
+
+[release]: https://github.com/peterbourgon/prometheus-aggregator/releases/latest
 
 ```
 go get github.com/peterbourgon/prometheus-aggregator
@@ -55,13 +57,15 @@ You can delare a metric without making an observation by omitting the value.
 ```
 
 You can declare metrics at runtime, like this, or you can predeclare metrics in
-a JSON file, and pass it to the program at startup. Or mix and match both. What
-do I care? I'm just some stupid README file.
+a JSON file, and pass it to the program at startup via the `-declfile` flag. Or
+mix and match both. What do I care? I'm just some stupid README file.
 
 ## Prometheus exposition format
 
 If serializing JSON is a bottleneck, you can optionally emit observations (but
-not declarations) in the [Prometheus exposition format][pef].
+not declarations) in the [Prometheus exposition format][pef]. Note that the
+parser (such as it is) is pretty strict, so don't get crazy with whitespace or
+whatever.
 
 [pef]: https://prometheus.io/docs/instrumenting/exposition_formats/
 
@@ -106,3 +110,10 @@ aggregation over summaries at query time anyway. You'll need to define some
 buckets and I know that sounds hard, and it _is_ hard, life is hard, I'm sorry
 for that but you can take some solace in the fact that we all kind of share this
 suffering as a species.
+
+## Bad data
+
+By default, if a client sends bad data, the only thing that happens is the
+prometheus-aggregator will log an error, the client won't know about it. This is
+a good idea for production but maybe for dev you want to pass the `-strict`
+flag, which means if a client sends bad data it gets disconnected!! Harsh!!
