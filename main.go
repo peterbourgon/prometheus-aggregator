@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -28,14 +29,17 @@ import (
 )
 
 func main() {
+	fs := flag.NewFlagSet("prometheus-aggregator", flag.ExitOnError)
 	var (
-		inaddr   = flag.String("in", "tcp://127.0.0.1:8192", "listen for metric writes")
-		outaddr  = flag.String("out", "tcp://127.0.0.1:8193/metrics", "listen for Prometheus scrapes")
-		declfile = flag.String("declfile", "", "file containing JSON metric declarations")
-		example  = flag.Bool("example", false, "print example declfile to stdout and return")
-		debug    = flag.Bool("debug", false, "log debug information")
+		inaddr   = fs.String("in", "tcp://127.0.0.1:8192", "listen for metric writes")
+		outaddr  = fs.String("out", "tcp://127.0.0.1:8193/metrics", "listen for Prometheus scrapes")
+		declfile = fs.String("declfile", "", "file containing JSON metric declarations")
+		example  = fs.Bool("example", false, "print example declfile to stdout and return")
+		debug    = fs.Bool("debug", false, "log debug information")
+		strict   = fs.Bool("strict", false, "disconnect clients when they send bad data")
 	)
-	flag.Parse()
+	fs.Usage = usageFor(fs, "prometheus-aggregator [flags]")
+	fs.Parse(os.Args[1:])
 
 	if *example {
 		buf, _ := json.MarshalIndent(exampleDecls, "", "    ")
@@ -116,7 +120,7 @@ func main() {
 					return err
 				}
 				connlogger := log.With(logger, "remote_addr", conn.RemoteAddr().String())
-				go handleConn(conn, u, connlogger)
+				go handleConn(conn, u, *strict, connlogger)
 			}
 		}, func(error) {
 			if err := inln.Close(); err != nil {
@@ -157,40 +161,68 @@ func main() {
 	level.Info(logger).Log("exit", g.Run())
 }
 
-//
-//
-//
-
-func handleConn(src io.Reader, dst interface{ observe(observation) error }, logger log.Logger) error {
-	s := bufio.NewScanner(src)
-	for s.Scan() {
-		var o observation
-		if s.Bytes()[0] == '{' {
-			if err := json.Unmarshal(s.Bytes(), &o); err != nil {
-				level.Error(logger).Log("line", "rejected", "err", errors.Wrap(err, "error unmarshaling JSON-formatted line"))
-				continue
+func usageFor(fs *flag.FlagSet, short string) func() {
+	return func() {
+		fmt.Fprintf(os.Stderr, "USAGE\n")
+		fmt.Fprintf(os.Stderr, "  %s\n", short)
+		fmt.Fprintf(os.Stderr, "\n")
+		fmt.Fprintf(os.Stderr, "FLAGS\n")
+		w := tabwriter.NewWriter(os.Stderr, 0, 2, 2, ' ', 0)
+		fs.VisitAll(func(f *flag.Flag) {
+			def := f.DefValue
+			if def == "" {
+				def = "..."
 			}
-		} else {
-			if err := prometheusUnmarshal(s.Bytes(), &o); err != nil {
-				level.Error(logger).Log("line", "rejected", "err", errors.Wrap(err, "error unmarshaling Prometheus-formatted line"))
-				continue
-			}
-		}
-		if err := dst.observe(o); err != nil {
-			level.Error(logger).Log("line", "rejected", "err", errors.Wrap(err, "error making observation"))
-			continue
-		}
-		level.Debug(logger).Log("line", "accepted", "name", o.Name)
+			fmt.Fprintf(w, "\t-%s %s\t%s\n", f.Name, def, f.Usage)
+		})
+		w.Flush()
+		fmt.Fprintf(os.Stderr, "\n")
 	}
-	return s.Err()
 }
 
 //
 //
 //
 
+type observer interface{ observe(observation) error }
+
+func handleConn(src io.ReadCloser, dst observer, strict bool, logger log.Logger) error {
+	defer src.Close()
+	s := bufio.NewScanner(src)
+	for s.Scan() {
+		o, err := parseLine(bytes.TrimSpace(s.Bytes()))
+		if err != nil {
+			level.Error(logger).Log("line", "rejected", "err", errors.Wrap(err, "parse error"))
+			if strict {
+				return errors.Wrap(err, "received bad line in strict mode")
+			}
+			continue
+		}
+
+		if err := dst.observe(o); err != nil {
+			level.Error(logger).Log("line", "rejected", "err", errors.Wrap(err, "observation error"))
+			if strict {
+				return errors.Wrap(err, "received bad line in strict mode")
+			}
+			continue
+		}
+
+		level.Debug(logger).Log("line", "accepted", "name", o.Name)
+	}
+	return s.Err()
+}
+
+func parseLine(p []byte) (o observation, err error) {
+	if p[0] == '{' {
+		err = json.Unmarshal(p, &o)
+	} else {
+		err = prometheusUnmarshal(p, &o)
+	}
+	return o, err
+}
+
 func prometheusUnmarshal(p []byte, o *observation) error {
-	x := bytes.IndexByte(p, ' ')
+	x := bytes.LastIndexByte(p, ' ')
 	if x < 1 {
 		return fmt.Errorf("bad format: couldn't find space")
 	}
@@ -256,7 +288,7 @@ type (
 		values  map[timeseriesKey]timeseriesValue
 	}
 
-	// timeseriesKey is universally unique e.g. `http_requests_total method="GET" status_code="200"`.
+	// timeseriesKey is universally unique e.g. `http_requests_total{method="GET",status_code="200"}`.
 	timeseriesKey string
 
 	// timeseriesValue is a set of observations for
@@ -350,11 +382,11 @@ func (u *universe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer u.mtx.Unlock()
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-	for _, n := range sortTimeseriesCollectionKeys(u.collections) {
+	for _, n := range sortMetricNames(u.collections) {
 		c := u.collections[n]
 		fmt.Fprintf(w, "# TYPE %s %s\n", n, c.typ)
 		fmt.Fprintf(w, "# HELP %s %s\n", n, c.help)
-		for _, k := range sortTimeseriesValueKeys(c.values) {
+		for _, k := range sortTimeseriesKeys(c.values) {
 			v := c.values[k]
 			fmt.Fprintf(w, v.renderText())
 		}
@@ -362,7 +394,7 @@ func (u *universe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sortTimeseriesCollectionKeys(collections map[metricName]*timeseriesCollection) (keys []metricName) {
+func sortMetricNames(collections map[metricName]*timeseriesCollection) (keys []metricName) {
 	keys = make([]metricName, 0, len(collections))
 	for k := range collections {
 		keys = append(keys, k)
@@ -371,7 +403,7 @@ func sortTimeseriesCollectionKeys(collections map[metricName]*timeseriesCollecti
 	return keys
 }
 
-func sortTimeseriesValueKeys(values map[timeseriesKey]timeseriesValue) (keys []timeseriesKey) {
+func sortTimeseriesKeys(values map[timeseriesKey]timeseriesValue) (keys []timeseriesKey) {
 	keys = make([]timeseriesKey, 0, len(values))
 	for k := range values {
 		keys = append(keys, k)
@@ -385,12 +417,12 @@ func sortTimeseriesValueKeys(values map[timeseriesKey]timeseriesValue) (keys []t
 //
 
 type observation struct {
-	Op      string            `json:"op,omitempty"`
 	Name    string            `json:"name"`
 	Type    string            `json:"type"`
 	Help    string            `json:"help"`
 	Buckets []float64         `json:"buckets,omitempty"`
 	Labels  map[string]string `json:"labels,omitempty"`
+	Op      string            `json:"op,omitempty"`
 	Value   *float64          `json:"value,omitempty"`
 }
 
@@ -523,16 +555,16 @@ func (h *histogram) renderText() string {
 	{
 		// Render all of the individual buckets,
 		// including a terminal +Inf bucket.
-		labels := h.labels
-		if labels == nil {
-			labels = map[string]string{}
+		labelscopy := map[string]string{}
+		for k, v := range h.labels {
+			labelscopy[k] = v
 		}
 		for _, b := range h.buckets {
-			labels["le"] = fmt.Sprint(b.max)
-			fmt.Fprintf(&sb, "%s%s %d\n", h.n, renderLabels(labels), b.count)
+			labelscopy["le"] = fmt.Sprint(b.max)
+			fmt.Fprintf(&sb, "%s%s %d\n", h.n, renderLabels(labelscopy), b.count)
 		}
-		labels["le"] = "+Inf"
-		fmt.Fprintf(&sb, "%s%s %d\n", h.n, renderLabels(labels), h.count)
+		labelscopy["le"] = "+Inf"
+		fmt.Fprintf(&sb, "%s%s %d\n", h.n, renderLabels(labelscopy), h.count)
 	}
 	{
 		// Render the aggregate statistics.
