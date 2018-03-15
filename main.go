@@ -21,10 +21,9 @@ import (
 
 func main() {
 	var (
-		netw    = flag.String("netw", "tcp", "listen network")
-		addr    = flag.String("addr", "127.0.0.1:8192", "listen address")
-		metrics = flag.String("metrics", "127.0.0.1:8193", "/metrics address")
-		debug   = flag.Bool("debug", false, "log debug information")
+		netw  = flag.String("netw", "tcp", "listen network")
+		addr  = flag.String("addr", "127.0.0.1:8192", "listen address")
+		debug = flag.Bool("debug", false, "log debug information")
 	)
 	flag.Parse()
 
