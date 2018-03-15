@@ -12,12 +12,14 @@ difficult or impossible to get Prometheus to scrape.
 [pushgateway]: https://github.com/prometheus/pushgateway
 [unicorn]: https://bogomips.org/unicorn/
 
-"But Peter, isn't this basically [statsd_exporter][statsd]?" Oops, yes, I
-misunderstood the README on that one. Maybe you could use that instead. But I
-think this is better, it doesn't have awful YAML mapping config and can handle
-dynamic mapping. It's easy to make it parse StatsD input, too.
+Related work:
 
-[statsd]: https://github.com/prometheus/statsd_exporter
+- [statsd_exporter][statsd] accepts StatsD writes, but requires a big YAML config for mappings
+- [prom-aggregation-gateway][pag] accepts HTTP POSTs from its corresponding [JavaScript client][jsc]
+
+[statsd]: https://github.com/prometheus/statsd_exporter/
+[pag]: https://github.com/weaveworks/prom-aggregation-gateway/
+[jsc]: https://github.com/weaveworks/promjs/
 
 ## Getting
 
