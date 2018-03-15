@@ -28,6 +28,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var version = "HEAD (dev/unreleased)"
+
 func main() {
 	fs := flag.NewFlagSet("prometheus-aggregator", flag.ExitOnError)
 	var (
@@ -176,6 +178,9 @@ func usageFor(fs *flag.FlagSet, short string) func() {
 			fmt.Fprintf(w, "\t-%s %s\t%s\n", f.Name, def, f.Usage)
 		})
 		w.Flush()
+		fmt.Fprintf(os.Stderr, "\n")
+		fmt.Fprintf(os.Stderr, "VERSION\n")
+		fmt.Fprintf(os.Stderr, "  %s\n", version)
 		fmt.Fprintf(os.Stderr, "\n")
 	}
 }
