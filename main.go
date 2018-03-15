@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -163,9 +165,16 @@ func handleConn(src io.Reader, dst interface{ observe(observation) error }, logg
 	s := bufio.NewScanner(src)
 	for s.Scan() {
 		var o observation
-		if err := json.Unmarshal(s.Bytes(), &o); err != nil {
-			level.Error(logger).Log("line", "rejected", "err", errors.Wrap(err, "error unmarshaling line"))
-			continue
+		if s.Bytes()[0] == '{' {
+			if err := json.Unmarshal(s.Bytes(), &o); err != nil {
+				level.Error(logger).Log("line", "rejected", "err", errors.Wrap(err, "error unmarshaling JSON-formatted line"))
+				continue
+			}
+		} else {
+			if err := prometheusUnmarshal(s.Bytes(), &o); err != nil {
+				level.Error(logger).Log("line", "rejected", "err", errors.Wrap(err, "error unmarshaling Prometheus-formatted line"))
+				continue
+			}
 		}
 		if err := dst.observe(o); err != nil {
 			level.Error(logger).Log("line", "rejected", "err", errors.Wrap(err, "error making observation"))
@@ -174,6 +183,54 @@ func handleConn(src io.Reader, dst interface{ observe(observation) error }, logg
 		level.Debug(logger).Log("line", "accepted", "name", o.Name)
 	}
 	return s.Err()
+}
+
+//
+//
+//
+
+func prometheusUnmarshal(p []byte, o *observation) error {
+	x := bytes.IndexByte(p, ' ')
+	if x < 1 {
+		return fmt.Errorf("bad format: couldn't find space")
+	}
+
+	id, val := p[:x], p[x+1:]
+
+	value, err := strconv.ParseFloat(string(val), 64)
+	if err != nil {
+		return errors.Wrapf(err, "bad value (%s)", string(val))
+	}
+
+	y := bytes.IndexByte(id, '{')
+	if y < 0 {
+		return fmt.Errorf("bad format: couldn't find opening brace")
+	}
+	if id[len(id)-1] != '}' {
+		return fmt.Errorf("bad format: couldn't find terminating brace")
+	}
+
+	name, labels := id[:y], id[y+1:len(id)-1]
+	labelmap := map[string]string{}
+	for _, pair := range bytes.Split(labels, []byte(",")) {
+		z := bytes.IndexByte(pair, '=')
+		if z < 0 {
+			continue
+		}
+		k, v := pair[:z], pair[z+1:]
+		if v[0] != '"' || v[len(v)-1] != '"' {
+			return fmt.Errorf("bad format: label value must be wrapped in quotes")
+		}
+		v = v[1 : len(v)-1]
+		labelmap[string(k)] = string(v)
+	}
+
+	o.Name = string(name)
+	o.Labels = labelmap
+	o.Value = new(float64)
+	(*o.Value) = value
+
+	return nil
 }
 
 //
@@ -217,43 +274,25 @@ func newUniverse(initial []observation) (*universe, error) {
 		collections: map[metricName]*timeseriesCollection{},
 	}
 	for _, o := range initial {
-		if err := u.declare(o); err != nil {
+		if err := u.observe(o); err != nil {
 			return nil, errors.Wrap(err, "loading initial set of declarations")
 		}
 	}
 	return u, nil
 }
 
-func (u *universe) ensure(o observation) (*timeseriesCollection, error) {
+func (u *universe) observe(o observation) error {
+	u.mtx.Lock()
+	defer u.mtx.Unlock()
 	n := o.metricName()
 	if _, ok := u.collections[n]; !ok {
 		c, err := newTimeseriesCollection(o.Type, o.Help, o.Buckets)
 		if err != nil {
-			return nil, errors.Wrap(err, "error creating new timeseries collection")
+			return errors.Wrap(err, "error creating new timeseries collection")
 		}
 		u.collections[n] = c
 	}
-	return u.collections[n], nil
-}
-
-func (u *universe) declare(o observation) error {
-	u.mtx.Lock()
-	defer u.mtx.Unlock()
-	c, err := u.ensure(o)
-	if err != nil {
-		return errors.Wrap(err, "error ensuring timeseries collection")
-	}
-	return c.declare(o)
-}
-
-func (u *universe) observe(o observation) error {
-	u.mtx.Lock()
-	defer u.mtx.Unlock()
-	c, err := u.ensure(o)
-	if err != nil {
-		return errors.Wrap(err, "error ensuring timeseries collection")
-	}
-	return c.observe(o)
+	return u.collections[n].observe(o)
 }
 
 func newTimeseriesCollection(typ, help string, buckets []float64) (*timeseriesCollection, error) {
@@ -273,30 +312,17 @@ func newTimeseriesCollection(typ, help string, buckets []float64) (*timeseriesCo
 	}, nil
 }
 
-func (c *timeseriesCollection) ensure(o observation) (timeseriesValue, error) {
+func (c *timeseriesCollection) observe(o observation) error {
 	o.Type, o.Help, o.Buckets = c.typ, c.help, c.buckets // first writer wins
 	k := o.timeseriesKey()
 	if _, ok := c.values[k]; !ok {
 		v, err := newTimeseriesValue(c.typ, o)
 		if err != nil {
-			return nil, errors.Wrap(err, "error creating new timeseries")
+			return errors.Wrap(err, "error creating new timeseries")
 		}
 		c.values[k] = v
 	}
-	return c.values[k], nil
-}
-
-func (c *timeseriesCollection) declare(o observation) error {
-	_, err := c.ensure(o)
-	return err
-}
-
-func (c *timeseriesCollection) observe(o observation) error {
-	v, err := c.ensure(o)
-	if err != nil {
-		return errors.Wrap(err, "error ensuring timeseries in collection")
-	}
-	return v.observe(o)
+	return c.values[k].observe(o)
 }
 
 func newTimeseriesValue(typ string, o observation) (timeseriesValue, error) {
@@ -365,7 +391,7 @@ type observation struct {
 	Help    string            `json:"help"`
 	Buckets []float64         `json:"buckets,omitempty"`
 	Labels  map[string]string `json:"labels,omitempty"`
-	Value   float64           `json:"value,omitempty"`
+	Value   *float64          `json:"value,omitempty"`
 }
 
 func (o observation) metricName() metricName       { return metricName(o.Name) }
@@ -394,7 +420,10 @@ func (c *counter) metricName() metricName       { return metricName(c.n) }
 func (c *counter) timeseriesKey() timeseriesKey { return makeTimeseriesKey(c.n, c.labels) }
 
 func (c *counter) observe(o observation) error {
-	c.value += o.Value
+	if o.Value == nil {
+		return nil // declaration
+	}
+	c.value += *o.Value
 	return nil
 }
 
@@ -425,11 +454,14 @@ func (g *gauge) metricName() metricName       { return metricName(g.n) }
 func (g *gauge) timeseriesKey() timeseriesKey { return makeTimeseriesKey(g.n, g.labels) }
 
 func (g *gauge) observe(o observation) error {
+	if o.Value == nil {
+		return nil // declaration
+	}
 	switch o.Op {
 	case "add":
-		g.value += o.Value
+		g.value += *o.Value
 	default:
-		g.value = o.Value
+		g.value = *o.Value
 	}
 	return nil
 }
@@ -473,10 +505,13 @@ func (h *histogram) metricName() metricName       { return metricName(h.n) }
 func (h *histogram) timeseriesKey() timeseriesKey { return makeTimeseriesKey(h.n, h.labels) }
 
 func (h *histogram) observe(o observation) error {
-	h.sum += o.Value
+	if o.Value == nil {
+		return nil // declaration
+	}
+	h.sum += *o.Value
 	h.count++
 	for i := range h.buckets {
-		if o.Value <= h.buckets[i].max {
+		if *o.Value <= h.buckets[i].max {
 			h.buckets[i].count++
 		}
 	}
