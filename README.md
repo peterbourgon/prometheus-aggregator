@@ -9,14 +9,14 @@ to help with edge case scenarios, for edxample Perl web services that use a
 [Unicorn][unicorn]-style forked process model to handle concurrency, and are
 difficult or impossible to get Prometheus to scrape.
 
-[pushgateway]: https://github.com/prometheus/pushgateway
-[unicorn]: https://bogomips.org/unicorn/
-
 Related work:
 
+- [pushgateway][pushgateway] doesn't do aggregation but works OK for things like batch or cron jobs
 - [statsd_exporter][statsd] accepts StatsD writes, but requires a big YAML config for mappings
 - [prom-aggregation-gateway][pag] accepts HTTP POSTs from its corresponding [JavaScript client][jsc]
 
+[pushgateway]: https://github.com/prometheus/pushgateway
+[unicorn]: https://bogomips.org/unicorn/
 [statsd]: https://github.com/prometheus/statsd_exporter/
 [pag]: https://github.com/weaveworks/prom-aggregation-gateway/
 [jsc]: https://github.com/weaveworks/promjs/
