@@ -218,7 +218,9 @@ func handleConn(src io.ReadCloser, dst observer, strict bool, logger log.Logger)
 }
 
 func parseLine(p []byte) (o observation, err error) {
-	if p[0] == '{' {
+	if len(p) <= 0 {
+		err = errors.New("invalid (empty) line")
+	} else if p[0] == '{' {
 		err = json.Unmarshal(p, &o)
 	} else {
 		err = prometheusUnmarshal(p, &o)

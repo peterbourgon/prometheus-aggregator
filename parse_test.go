@@ -18,6 +18,10 @@ func TestParsePrometheus(t *testing.T) {
 		obs   observation
 		err   bool
 	}{
+		"only spaces": {
+			input: `    `,
+			err:   true,
+		},
 		"empty": {
 			input: ``,
 			err:   true,
