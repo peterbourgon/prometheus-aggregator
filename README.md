@@ -134,8 +134,8 @@ Histograms are supported too. Provide buckets with the declaration.
 {"name": "myapp_req_dur_seconds", "type": "histogram",
   "help": "Duration of request in seconds.", 
     "buckets": [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10]}
-myapp_req_dur_seconds{} 0.0123\n
-myapp_req_dur_seconds{} 0.99\n
+myapp_req_dur_seconds{} 0.0123
+myapp_req_dur_seconds{} 0.99
 ```
 
 **Summaries are not supported**. This is fine, you can't do meaningful
