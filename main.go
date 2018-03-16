@@ -33,12 +33,13 @@ var version = "HEAD (dev/unreleased)"
 func main() {
 	fs := flag.NewFlagSet("prometheus-aggregator", flag.ExitOnError)
 	var (
-		inaddr   = fs.String("in", "tcp://127.0.0.1:8192", "listen for metric writes")
-		outaddr  = fs.String("out", "tcp://127.0.0.1:8193/metrics", "listen for Prometheus scrapes")
-		declfile = fs.String("declfile", "", "file containing JSON metric declarations")
-		example  = fs.Bool("example", false, "print example declfile to stdout and return")
-		debug    = fs.Bool("debug", false, "log debug information")
-		strict   = fs.Bool("strict", false, "disconnect clients when they send bad data")
+		directAddr = fs.String("direct", "tcp://127.0.0.1:8191", "address for direct socket metric writes")
+		postAddr   = fs.String("post", "tcp://127.0.0.1:8192/send-metrics", "address for chunked HTTP POST metric writes")
+		promAddr   = fs.String("prometheus", "tcp://127.0.0.1:8193/metrics", "address for Prometheus scrapes")
+		declfile   = fs.String("declfile", "", "file containing JSON metric declarations")
+		example    = fs.Bool("example", false, "print example declfile to stdout and return")
+		debug      = fs.Bool("debug", false, "log debug information")
+		strict     = fs.Bool("strict", false, "disconnect clients when they send bad data")
 	)
 	fs.Usage = usageFor(fs, "prometheus-aggregator [flags]")
 	fs.Parse(os.Args[1:])
@@ -59,34 +60,50 @@ func main() {
 		logger = level.NewFilter(logger, loglevel)
 	}
 
-	var inln net.Listener
+	var directLn net.Listener
 	{
-		u, err := url.Parse(*inaddr)
+		u, err := url.Parse(*directAddr)
 		if err != nil {
-			level.Error(logger).Log("in", *inaddr, "err", err)
+			level.Error(logger).Log("direct", *directAddr, "err", err)
 			os.Exit(1)
 		}
-		inln, err = net.Listen(u.Scheme, u.Host)
+		directLn, err = net.Listen(u.Scheme, u.Host)
 		if err != nil {
-			level.Error(logger).Log("in", *inaddr, "err", err)
+			level.Error(logger).Log("direct", *directAddr, "err", err)
 			os.Exit(1)
 		}
 	}
 
-	var outln net.Listener
-	var path string
+	var postLn net.Listener
+	var postPath string
 	{
-		u, err := url.Parse(*outaddr)
+		u, err := url.Parse(*postAddr)
 		if err != nil {
-			level.Error(logger).Log("out", *outaddr, "err", err)
+			level.Error(logger).Log("http_post", *postAddr, "err", err)
 			os.Exit(1)
 		}
-		outln, err = net.Listen(u.Scheme, u.Host)
+		postLn, err = net.Listen(u.Scheme, u.Host)
 		if err != nil {
-			level.Error(logger).Log("out", *outaddr, "err", err)
+			level.Error(logger).Log("http_post", *postAddr, "err", err)
 			os.Exit(1)
 		}
-		path = u.Path
+		postPath = u.Path
+	}
+
+	var promLn net.Listener
+	var promPath string
+	{
+		u, err := url.Parse(*promAddr)
+		if err != nil {
+			level.Error(logger).Log("prometheus", *promAddr, "err", err)
+			os.Exit(1)
+		}
+		promLn, err = net.Listen(u.Scheme, u.Host)
+		if err != nil {
+			level.Error(logger).Log("prometheus", *promAddr, "err", err)
+			os.Exit(1)
+		}
+		promPath = u.Path
 	}
 
 	var initial []observation
@@ -115,28 +132,43 @@ func main() {
 	var g run.Group
 	{
 		g.Add(func() error {
-			level.Info(logger).Log("listener", "user", "addr", inln.Addr().String())
+			level.Info(logger).Log("listener", "direct_writes", "addr", directLn.Addr().String())
 			for {
-				conn, err := inln.Accept()
+				conn, err := directLn.Accept()
 				if err != nil {
 					return err
 				}
-				connlogger := log.With(logger, "remote_addr", conn.RemoteAddr().String())
-				go handleConn(conn, u, *strict, connlogger)
+				directLogger := log.With(logger, "remote_addr", conn.RemoteAddr().String())
+				go handleDirectWrites(conn, u, *strict, directLogger)
 			}
 		}, func(error) {
-			if err := inln.Close(); err != nil {
+			if err := directLn.Close(); err != nil {
 				level.Error(logger).Log("err", err)
 			}
 		})
 	}
 	{
 		mux := http.NewServeMux()
-		mux.Handle(path, u)
+		mux.Handle(postPath, handlePostWrites(u, *strict, logger))
 		server := http.Server{Handler: mux}
 		g.Add(func() error {
-			level.Info(logger).Log("listener", "Prometheus", "addr", outln.Addr().String(), "path", path)
-			return server.Serve(outln)
+			level.Info(logger).Log("listener", "http_post_writes", "addr", postLn.Addr().String(), "path", postPath)
+			return server.Serve(postLn)
+		}, func(error) {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if err := server.Shutdown(ctx); err != nil {
+				level.Error(logger).Log("err", err)
+			}
+		})
+	}
+	{
+		mux := http.NewServeMux()
+		mux.Handle(promPath, u)
+		server := http.Server{Handler: mux}
+		g.Add(func() error {
+			level.Info(logger).Log("listener", "prometheus", "addr", promLn.Addr().String(), "path", promPath)
+			return server.Serve(promLn)
 		}, func(error) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
@@ -191,9 +223,26 @@ func usageFor(fs *flag.FlagSet, short string) func() {
 
 type observer interface{ observe(observation) error }
 
-func handleConn(src io.ReadCloser, dst observer, strict bool, logger log.Logger) error {
+func handleDirectWrites(src io.ReadCloser, dst observer, strict bool, logger log.Logger) error {
 	defer src.Close()
-	s := bufio.NewScanner(src)
+	return scanOver(src, dst, strict, logger)
+}
+
+func handlePostWrites(dst observer, strict bool, logger log.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch err := scanOver(r.Body, dst, strict, logger); err {
+		case nil:
+			fmt.Fprintln(w, "Done (no error)")
+		case io.EOF:
+			fmt.Fprintln(w, "Done (EOF)")
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+}
+
+func scanOver(r io.Reader, dst observer, strict bool, logger log.Logger) error {
+	s := bufio.NewScanner(r)
 	for s.Scan() {
 		o, err := parseLine(bytes.TrimSpace(s.Bytes()))
 		if err != nil {
@@ -203,7 +252,6 @@ func handleConn(src io.ReadCloser, dst observer, strict bool, logger log.Logger)
 			}
 			continue
 		}
-
 		if err := dst.observe(o); err != nil {
 			level.Error(logger).Log("line", "rejected", "err", errors.Wrap(err, "observation error"))
 			if strict {
@@ -211,7 +259,6 @@ func handleConn(src io.ReadCloser, dst observer, strict bool, logger log.Logger)
 			}
 			continue
 		}
-
 		level.Debug(logger).Log("line", "accepted", "name", o.Name)
 	}
 	return s.Err()
@@ -436,6 +483,32 @@ type observation struct {
 	Labels  map[string]string `json:"labels,omitempty"`
 	Op      string            `json:"op,omitempty"`
 	Value   *float64          `json:"value,omitempty"`
+}
+
+// Custom UnmarshalJSON function to intercept "keys" as "labels".
+// For compatibility with discourse/prometheus_exporter.
+func (o *observation) UnmarshalJSON(data []byte) error {
+	// Avoid an infinite UnmarshalJSON loop.
+	// http://choly.ca/post/go-json-marshalling/
+	type observationAlias observation
+	intermediate := &struct {
+		Keys map[string]string `json:"keys"`
+		*observationAlias
+	}{
+		observationAlias: (*observationAlias)(o),
+	}
+	if err := json.Unmarshal(data, &intermediate); err != nil {
+		return err
+	}
+	if len(intermediate.Keys) > 0 {
+		if o.Labels == nil {
+			o.Labels = map[string]string{}
+		}
+		for k, v := range intermediate.Keys {
+			o.Labels[k] = v
+		}
+	}
+	return nil
 }
 
 func (o observation) metricName() metricName       { return metricName(o.Name) }

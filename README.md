@@ -11,15 +11,17 @@ difficult or impossible to get Prometheus to scrape.
 
 Related work:
 
-- [pushgateway][pushgateway] doesn't do aggregation but works OK for things like batch or cron jobs
-- [statsd_exporter][statsd] accepts StatsD writes, but requires a big YAML config for mappings
-- [prom-aggregation-gateway][pag] accepts HTTP POSTs from its corresponding [JavaScript client][jsc]
+- [prometheus/pushgateway][pushgateway] doesn't do aggregation but works OK for things like batch or cron jobs
+- [prometheus/statsd_exporter][statsd] accepts StatsD writes, but requires a big YAML config for mappings
+- [weaveworks/prom-aggregation-gateway][pag] accepts HTTP POSTs from its corresponding [JavaScript client][jsc]
+- [discourse/prometheus_exporter][dpe] is a pure-Ruby solution with client gem, but doesn't support histograms (see [compatibility](#compatibility-with-prometheus_exporter))
 
 [pushgateway]: https://github.com/prometheus/pushgateway
 [unicorn]: https://bogomips.org/unicorn/
 [statsd]: https://github.com/prometheus/statsd_exporter/
 [pag]: https://github.com/weaveworks/prom-aggregation-gateway/
 [jsc]: https://github.com/weaveworks/promjs/
+[dpe]: https://github.com/discourse/prometheus_exporter/
 
 ## Getting
 
@@ -117,8 +119,7 @@ myapp_req_dur_seconds{} 0.99\n
 **Summaries are not supported**. This is fine, you can't do meaningful
 aggregation over summaries at query time anyway. You'll need to define some
 buckets and I know that sounds hard, and it _is_ hard, life is hard, I'm sorry
-for that but you can take some solace in the fact that we all kind of share this
-suffering as a species.
+for that.
 
 ## Bad data
 
@@ -126,3 +127,20 @@ By default, if a client sends bad data, the only thing that happens is the
 prometheus-aggregator will log an error, the client won't know about it. This is
 a good idea for production but maybe for dev you want to pass the `-strict`
 flag, which means if a client sends bad data it gets disconnected!! Harsh!!
+
+## Compatibility with prometheus_exporter
+
+You can use this server as a replacement for the sidecar server component of
+[discourse/prometheus_exporter](https://github.com/discourse/prometheus_exporter).
+That Ruby client gem makes an HTTP POST with `Transfer-Encoding: chunked` and
+transmits JSON objects with [a certain implicit schema][schema], which we
+accept.
+
+[schema]: https://github.com/discourse/prometheus_exporter/blob/ec92e62/lib/prometheus_exporter/client.rb#L17-L23
+
+This should work transparently for counters and gauges. This will not work for
+summaries, because we don't support summaries. This _can_ work for histograms,
+if you hack it a bit. You'll have to pre-declare the histogram metric with
+buckets via an e.g. `-declfile`, and then send the histogram observations from
+the client gem as if they were summaries. I'm not sure this is actually worth
+doing.
