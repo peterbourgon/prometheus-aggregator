@@ -5,7 +5,7 @@ Receive and aggregate metrics for consumption by a Prometheus server.
 **DON'T USE THIS TOOL**. If at all possible, you should expose a /metrics
 endpoint in your service and have Prometheus scrape it directly. If you're
 running a cron job, prefer [the pushgateway][pushgateway]. This tool only exists
-to help with edge case scenarios, for edxample Perl web services that use a
+to help with edge case scenarios, for example Perl web services that use a
 [Unicorn][unicorn]-style forked process model to handle concurrency, and are
 difficult or impossible to get Prometheus to scrape.
 
