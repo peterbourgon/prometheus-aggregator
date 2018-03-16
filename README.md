@@ -36,6 +36,28 @@ go get github.com/peterbourgon/prometheus-aggregator
 $GOPATH/bin/prometheus-aggregator -h
 ```
 
+## Running
+
+I mean you just kinda run it.
+
+```
+$ prometheus-aggregator -h
+USAGE
+  prometheus-aggregator [flags]
+
+FLAGS
+  -debug false                              log debug information
+  -declfile ...                             file containing JSON metric declarations
+  -direct tcp://127.0.0.1:8191              address for direct socket metric writes
+  -example false                            print example declfile to stdout and return
+  -post tcp://127.0.0.1:8192/send-metrics   address for chunked HTTP POST metric writes
+  -prometheus tcp://127.0.0.1:8193/metrics  address for Prometheus scrapes
+  -strict false                             disconnect clients when they send bad data
+
+VERSION
+  0.0.4
+```
+
 ## How it works
 
 The prometheus-aggregator expects clients to connect and emit newline-delimited
