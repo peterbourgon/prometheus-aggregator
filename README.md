@@ -14,7 +14,7 @@ Related work:
 - [prometheus/pushgateway][pushgateway] doesn't do aggregation but works OK for things like batch or cron jobs
 - [prometheus/statsd_exporter][statsd] accepts StatsD writes, but requires a big YAML config for mappings
 - [weaveworks/prom-aggregation-gateway][pag] accepts HTTP POSTs from its corresponding [JavaScript client][jsc]
-- [discourse/prometheus_exporter][dpe] is a pure-Ruby solution with client gem, but doesn't support histograms (see [compatibility](#compatibility-with-prometheus_exporter))
+- [discourse/prometheus_exporter][dpe] is a Ruby solution with client gem, but no histograms (see [compatibility](#compatibility-with-prometheus_exporter))
 
 [pushgateway]: https://github.com/prometheus/pushgateway
 [unicorn]: https://bogomips.org/unicorn/
