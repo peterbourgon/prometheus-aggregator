@@ -1,3 +1,7 @@
+## v0.0.6
+
+- Renamed -direct to -socket.
+
 ## v0.0.5
 
 - Removed discourse/prometheus_exporter compatibility.
