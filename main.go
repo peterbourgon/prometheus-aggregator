@@ -33,13 +33,12 @@ var version = "HEAD (dev/unreleased)"
 func main() {
 	fs := flag.NewFlagSet("prometheus-aggregator", flag.ExitOnError)
 	var (
-		directAddr = fs.String("direct", "tcp://127.0.0.1:8191", "address for direct socket metric writes")
-		postAddr   = fs.String("post", "tcp://127.0.0.1:8192/send-metrics", "address for chunked HTTP POST metric writes")
-		promAddr   = fs.String("prometheus", "tcp://127.0.0.1:8193/metrics", "address for Prometheus scrapes")
-		declfile   = fs.String("declfile", "", "file containing JSON metric declarations")
-		example    = fs.Bool("example", false, "print example declfile to stdout and return")
-		debug      = fs.Bool("debug", false, "log debug information")
-		strict     = fs.Bool("strict", false, "disconnect clients when they send bad data")
+		sockAddr = fs.String("direct", "tcp://127.0.0.1:8191", "address for direct socket metric writes")
+		promAddr = fs.String("prometheus", "tcp://127.0.0.1:8192/metrics", "address for Prometheus scrapes")
+		declfile = fs.String("declfile", "", "file containing JSON metric declarations")
+		example  = fs.Bool("example", false, "print example declfile to stdout and return")
+		debug    = fs.Bool("debug", false, "log debug information")
+		strict   = fs.Bool("strict", false, "disconnect clients when they send bad data")
 	)
 	fs.Usage = usageFor(fs, "prometheus-aggregator [flags]")
 	fs.Parse(os.Args[1:])
@@ -60,34 +59,18 @@ func main() {
 		logger = level.NewFilter(logger, loglevel)
 	}
 
-	var directLn net.Listener
+	var sockLn net.Listener
 	{
-		u, err := url.Parse(*directAddr)
+		u, err := url.Parse(*sockAddr)
 		if err != nil {
-			level.Error(logger).Log("direct", *directAddr, "err", err)
+			level.Error(logger).Log("socket", *sockAddr, "err", err)
 			os.Exit(1)
 		}
-		directLn, err = net.Listen(u.Scheme, u.Host)
+		sockLn, err = net.Listen(u.Scheme, u.Host)
 		if err != nil {
-			level.Error(logger).Log("direct", *directAddr, "err", err)
+			level.Error(logger).Log("socket", *sockAddr, "err", err)
 			os.Exit(1)
 		}
-	}
-
-	var postLn net.Listener
-	var postPath string
-	{
-		u, err := url.Parse(*postAddr)
-		if err != nil {
-			level.Error(logger).Log("http_post", *postAddr, "err", err)
-			os.Exit(1)
-		}
-		postLn, err = net.Listen(u.Scheme, u.Host)
-		if err != nil {
-			level.Error(logger).Log("http_post", *postAddr, "err", err)
-			os.Exit(1)
-		}
-		postPath = u.Path
 	}
 
 	var promLn net.Listener
@@ -132,32 +115,17 @@ func main() {
 	var g run.Group
 	{
 		g.Add(func() error {
-			level.Info(logger).Log("listener", "direct_writes", "addr", directLn.Addr().String())
+			level.Info(logger).Log("listener", "socket_writes", "addr", sockLn.Addr().String())
 			for {
-				conn, err := directLn.Accept()
+				conn, err := sockLn.Accept()
 				if err != nil {
 					return err
 				}
 				directLogger := log.With(logger, "remote_addr", conn.RemoteAddr().String())
-				go handleDirectWrites(conn, u, *strict, directLogger)
+				go handleSocketWrites(conn, u, *strict, directLogger)
 			}
 		}, func(error) {
-			if err := directLn.Close(); err != nil {
-				level.Error(logger).Log("err", err)
-			}
-		})
-	}
-	{
-		mux := http.NewServeMux()
-		mux.Handle(postPath, handlePostWrites(u, *strict, logger))
-		server := http.Server{Handler: mux}
-		g.Add(func() error {
-			level.Info(logger).Log("listener", "http_post_writes", "addr", postLn.Addr().String(), "path", postPath)
-			return server.Serve(postLn)
-		}, func(error) {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-			if err := server.Shutdown(ctx); err != nil {
+			if err := sockLn.Close(); err != nil {
 				level.Error(logger).Log("err", err)
 			}
 		})
@@ -167,7 +135,7 @@ func main() {
 		mux.Handle(promPath, u)
 		server := http.Server{Handler: mux}
 		g.Add(func() error {
-			level.Info(logger).Log("listener", "prometheus", "addr", promLn.Addr().String(), "path", promPath)
+			level.Info(logger).Log("listener", "prometheus_scrapes", "addr", promLn.Addr().String(), "path", promPath)
 			return server.Serve(promLn)
 		}, func(error) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -223,26 +191,9 @@ func usageFor(fs *flag.FlagSet, short string) func() {
 
 type observer interface{ observe(observation) error }
 
-func handleDirectWrites(src io.ReadCloser, dst observer, strict bool, logger log.Logger) error {
+func handleSocketWrites(src io.ReadCloser, dst observer, strict bool, logger log.Logger) error {
 	defer src.Close()
-	return scanOver(src, dst, strict, logger)
-}
-
-func handlePostWrites(dst observer, strict bool, logger log.Logger) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch err := scanOver(r.Body, dst, strict, logger); err {
-		case nil:
-			fmt.Fprintln(w, "Done (no error)")
-		case io.EOF:
-			fmt.Fprintln(w, "Done (EOF)")
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	})
-}
-
-func scanOver(r io.Reader, dst observer, strict bool, logger log.Logger) error {
-	s := bufio.NewScanner(r)
+	s := bufio.NewScanner(src)
 	for s.Scan() {
 		o, err := parseLine(bytes.TrimSpace(s.Bytes()))
 		if err != nil {
@@ -483,32 +434,6 @@ type observation struct {
 	Labels  map[string]string `json:"labels,omitempty"`
 	Op      string            `json:"op,omitempty"`
 	Value   *float64          `json:"value,omitempty"`
-}
-
-// Custom UnmarshalJSON function to intercept "keys" as "labels".
-// For compatibility with discourse/prometheus_exporter.
-func (o *observation) UnmarshalJSON(data []byte) error {
-	// Avoid an infinite UnmarshalJSON loop.
-	// http://choly.ca/post/go-json-marshalling/
-	type observationAlias observation
-	intermediate := &struct {
-		Keys map[string]string `json:"keys"`
-		*observationAlias
-	}{
-		observationAlias: (*observationAlias)(o),
-	}
-	if err := json.Unmarshal(data, &intermediate); err != nil {
-		return err
-	}
-	if len(intermediate.Keys) > 0 {
-		if o.Labels == nil {
-			o.Labels = map[string]string{}
-		}
-		for k, v := range intermediate.Keys {
-			o.Labels[k] = v
-		}
-	}
-	return nil
 }
 
 func (o observation) metricName() metricName       { return metricName(o.Name) }

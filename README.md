@@ -14,7 +14,7 @@ Related work:
 - [prometheus/pushgateway][pushgateway] doesn't do aggregation but works OK for things like batch or cron jobs
 - [prometheus/statsd_exporter][statsd] accepts StatsD writes, but requires a big YAML config for mappings
 - [weaveworks/prom-aggregation-gateway][pag] accepts HTTP POSTs from its corresponding [JavaScript client][jsc]
-- [discourse/prometheus_exporter][dpe] is a Ruby solution with client gem, but no histograms (see [compatibility](#compatibility-with-prometheus_exporter))
+- [discourse/prometheus_exporter][dpe] is a Ruby solution with client gem, but no histograms
 
 [pushgateway]: https://github.com/prometheus/pushgateway
 [unicorn]: https://bogomips.org/unicorn/
@@ -50,8 +50,7 @@ FLAGS
   -declfile ...                             file containing JSON metric declarations
   -direct tcp://127.0.0.1:8191              address for direct socket metric writes
   -example false                            print example declfile to stdout and return
-  -post tcp://127.0.0.1:8192/send-metrics   address for chunked HTTP POST metric writes
-  -prometheus tcp://127.0.0.1:8193/metrics  address for Prometheus scrapes
+  -prometheus tcp://127.0.0.1:8192/metrics  address for Prometheus scrapes
   -strict false                             disconnect clients when they send bad data
 
 VERSION
@@ -149,20 +148,3 @@ By default, if a client sends bad data, the only thing that happens is the
 prometheus-aggregator will log an error, the client won't know about it. This is
 a good idea for production but maybe for dev you want to pass the `-strict`
 flag, which means if a client sends bad data it gets disconnected!! Harsh!!
-
-## Compatibility with prometheus_exporter
-
-You can use this server as a replacement for the sidecar server component of
-[discourse/prometheus_exporter](https://github.com/discourse/prometheus_exporter).
-That Ruby client gem makes an HTTP POST with `Transfer-Encoding: chunked` and
-transmits JSON objects with [a certain implicit schema][schema], which we
-accept.
-
-[schema]: https://github.com/discourse/prometheus_exporter/blob/ec92e62/lib/prometheus_exporter/client.rb#L17-L23
-
-This should work transparently for counters and gauges. This will not work for
-summaries, because we don't support summaries. This _can_ work for histograms,
-if you hack it a bit. You'll have to pre-declare the histogram metric with
-buckets via an e.g. `-declfile`, and then send the histogram observations from
-the client gem as if they were summaries. I'm not sure this is actually worth
-doing.
