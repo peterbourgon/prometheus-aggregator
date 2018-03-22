@@ -33,7 +33,7 @@ var version = "HEAD (dev/unreleased)"
 func main() {
 	fs := flag.NewFlagSet("prometheus-aggregator", flag.ExitOnError)
 	var (
-		sockAddr = fs.String("direct", "tcp://127.0.0.1:8191", "address for direct socket metric writes")
+		sockAddr = fs.String("socket", "tcp://127.0.0.1:8191", "address for direct socket metric writes")
 		promAddr = fs.String("prometheus", "tcp://127.0.0.1:8192/metrics", "address for Prometheus scrapes")
 		declfile = fs.String("declfile", "", "file containing JSON metric declarations")
 		example  = fs.Bool("example", false, "print example declfile to stdout and return")

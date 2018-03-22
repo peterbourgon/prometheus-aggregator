@@ -41,20 +41,19 @@ $GOPATH/bin/prometheus-aggregator -h
 I mean you just kinda run it.
 
 ```
-$ prometheus-aggregator -h
 USAGE
   prometheus-aggregator [flags]
 
 FLAGS
   -debug false                              log debug information
   -declfile ...                             file containing JSON metric declarations
-  -direct tcp://127.0.0.1:8191              address for direct socket metric writes
   -example false                            print example declfile to stdout and return
   -prometheus tcp://127.0.0.1:8192/metrics  address for Prometheus scrapes
+  -socket tcp://127.0.0.1:8191              address for direct socket metric writes
   -strict false                             disconnect clients when they send bad data
 
 VERSION
-  0.0.4
+  0.0.5
 ```
 
 ## How it works
