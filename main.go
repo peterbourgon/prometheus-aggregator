@@ -87,6 +87,9 @@ func main() {
 			os.Exit(1)
 		}
 		promPath = u.Path
+		if promPath == "" {
+			promPath = "/"
+		}
 	}
 
 	var initial []observation
