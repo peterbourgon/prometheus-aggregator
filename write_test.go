@@ -10,7 +10,7 @@ import (
 	"github.com/go-kit/kit/log"
 )
 
-func TestSocketWrites(t *testing.T) {
+func TestHandleConn(t *testing.T) {
 	// Set up our little universe.
 	var (
 		dst, _ = newUniverse()
@@ -23,7 +23,7 @@ func TestSocketWrites(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		handleSocketWrites(src, dst, strict, logger)
+		handleConn(src, dst, strict, logger)
 	}()
 
 	// Make writes to the input of the pipe.

@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -15,7 +12,6 @@ import (
 	"os"
 	"os/signal"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -59,39 +55,6 @@ func main() {
 		logger = level.NewFilter(logger, loglevel)
 	}
 
-	var sockLn net.Listener
-	{
-		u, err := url.Parse(*sockAddr)
-		if err != nil {
-			level.Error(logger).Log("socket", *sockAddr, "err", err)
-			os.Exit(1)
-		}
-		sockLn, err = net.Listen(u.Scheme, u.Host)
-		if err != nil {
-			level.Error(logger).Log("socket", *sockAddr, "err", err)
-			os.Exit(1)
-		}
-	}
-
-	var promLn net.Listener
-	var promPath string
-	{
-		u, err := url.Parse(*promAddr)
-		if err != nil {
-			level.Error(logger).Log("prometheus", *promAddr, "err", err)
-			os.Exit(1)
-		}
-		promLn, err = net.Listen(u.Scheme, u.Host)
-		if err != nil {
-			level.Error(logger).Log("prometheus", *promAddr, "err", err)
-			os.Exit(1)
-		}
-		promPath = u.Path
-		if promPath == "" {
-			promPath = "/"
-		}
-	}
-
 	var initial []observation
 	if *declfile != "" {
 		buf, err := ioutil.ReadFile(*declfile)
@@ -115,22 +78,70 @@ func main() {
 		}
 	}
 
+	var forwardFunc func() error
+	var forwardClose func() error
+	{
+		sockURL, err := url.Parse(*sockAddr)
+		if err != nil {
+			level.Error(logger).Log("socket", *sockAddr, "err", err)
+			os.Exit(1)
+		}
+		switch strings.ToLower(sockURL.Scheme) {
+		case "udp", "udp4", "udp6", "unixgram":
+			laddr, err := net.ResolveUDPAddr(sockURL.Scheme, sockURL.Host)
+			if err != nil {
+				level.Error(logger).Log("socket", *sockAddr, "err", err)
+				os.Exit(1)
+			}
+			conn, err := net.ListenUDP(sockURL.Scheme, laddr)
+			if err != nil {
+				level.Error(logger).Log("socket", *sockAddr, "err", err)
+				os.Exit(1)
+			}
+			forwardFunc = func() error { return forwardPacketConn(conn, u, logger) }
+			forwardClose = conn.Close
+
+		case "tcp", "tcp4", "tcp6", "unix", "unixpacket":
+			ln, err := net.Listen(sockURL.Scheme, sockURL.Host)
+			if err != nil {
+				level.Error(logger).Log("socket", *sockAddr, "err", err)
+				os.Exit(1)
+			}
+			forwardFunc = func() error { return forwardListener(ln, u, *strict, logger) }
+			forwardClose = ln.Close
+
+		default:
+			level.Error(logger).Log("socket", *sockAddr, "err", "unsupported network", "network", sockURL.Scheme)
+			os.Exit(1)
+		}
+	}
+
+	var promLn net.Listener
+	var promPath string
+	{
+		u, err := url.Parse(*promAddr)
+		if err != nil {
+			level.Error(logger).Log("prometheus", *promAddr, "err", err)
+			os.Exit(1)
+		}
+		promLn, err = net.Listen(u.Scheme, u.Host)
+		if err != nil {
+			level.Error(logger).Log("prometheus", *promAddr, "err", err)
+			os.Exit(1)
+		}
+		promPath = u.Path
+		if promPath == "" {
+			promPath = "/"
+		}
+	}
+
 	var g run.Group
 	{
 		g.Add(func() error {
-			level.Info(logger).Log("listener", "socket_writes", "addr", sockLn.Addr().String())
-			for {
-				conn, err := sockLn.Accept()
-				if err != nil {
-					return err
-				}
-				directLogger := log.With(logger, "remote_addr", conn.RemoteAddr().String())
-				go handleSocketWrites(conn, u, *strict, directLogger)
-			}
+			level.Info(logger).Log("listener", "socket_writes", "addr", *sockAddr)
+			return forwardFunc()
 		}, func(error) {
-			if err := sockLn.Close(); err != nil {
-				level.Error(logger).Log("err", err)
-			}
+			forwardClose()
 		})
 	}
 	{
@@ -186,96 +197,6 @@ func usageFor(fs *flag.FlagSet, short string) func() {
 		fmt.Fprintf(os.Stderr, "  %s\n", version)
 		fmt.Fprintf(os.Stderr, "\n")
 	}
-}
-
-//
-//
-//
-
-type observer interface{ observe(observation) error }
-
-func handleSocketWrites(src io.ReadCloser, dst observer, strict bool, logger log.Logger) error {
-	defer src.Close()
-	s := bufio.NewScanner(src)
-	for s.Scan() {
-		o, err := parseLine(bytes.TrimSpace(s.Bytes()))
-		if err != nil {
-			level.Error(logger).Log("line", "rejected", "err", errors.Wrap(err, "parse error"))
-			if strict {
-				return errors.Wrap(err, "received bad line in strict mode")
-			}
-			continue
-		}
-		if err := dst.observe(o); err != nil {
-			level.Error(logger).Log("line", "rejected", "err", errors.Wrap(err, "observation error"))
-			if strict {
-				return errors.Wrap(err, "received bad line in strict mode")
-			}
-			continue
-		}
-		level.Debug(logger).Log("line", "accepted", "name", o.Name)
-	}
-	return s.Err()
-}
-
-func parseLine(p []byte) (o observation, err error) {
-	if len(p) <= 0 {
-		err = errors.New("invalid (empty) line")
-	} else if p[0] == '{' {
-		err = json.Unmarshal(p, &o)
-	} else {
-		err = prometheusUnmarshal(p, &o)
-	}
-	return o, err
-}
-
-func prometheusUnmarshal(p []byte, o *observation) error {
-	p = bytes.TrimSpace(p)
-	x := bytes.LastIndexByte(p, ' ')
-	if x < 1 {
-		return fmt.Errorf("bad format: couldn't find space")
-	}
-
-	id, val := bytes.TrimSpace(p[:x]), bytes.TrimSpace(p[x+1:])
-
-	value, err := strconv.ParseFloat(string(val), 64)
-	if err != nil {
-		return errors.Wrapf(err, "bad value (%s)", string(val))
-	}
-
-	y := bytes.IndexByte(id, '{')
-	if y < 0 {
-		return fmt.Errorf("bad format: couldn't find opening brace")
-	}
-	if id[len(id)-1] != '}' {
-		return fmt.Errorf("bad format: couldn't find terminating brace")
-	}
-
-	name, labels := id[:y], id[y+1:len(id)-1]
-	if bytes.ContainsRune(labels, ' ') {
-		return fmt.Errorf("bad format: ")
-	}
-
-	labelmap := map[string]string{}
-	for _, pair := range bytes.Split(labels, []byte(",")) {
-		z := bytes.IndexByte(pair, '=')
-		if z < 0 {
-			continue
-		}
-		k, v := pair[:z], pair[z+1:]
-		if v[0] != '"' || v[len(v)-1] != '"' {
-			return fmt.Errorf("bad format: label value must be wrapped in quotes")
-		}
-		v = v[1 : len(v)-1]
-		labelmap[string(k)] = string(v)
-	}
-
-	o.Name = string(name)
-	o.Labels = labelmap
-	o.Value = new(float64)
-	(*o.Value) = value
-
-	return nil
 }
 
 //

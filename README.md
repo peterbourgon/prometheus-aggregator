@@ -147,3 +147,9 @@ By default, if a client sends bad data, the only thing that happens is the
 prometheus-aggregator will log an error, the client won't know about it. This is
 a good idea for production but maybe for dev you want to pass the `-strict`
 flag, which means if a client sends bad data it gets disconnected!! Harsh!!
+
+## UDP
+
+You can specify a socket write address as e.g. `udp://127.0.0.1:8191` and then
+you can emit UDP observations! The same rules apply, one metric per datagram.
+The `-strict` flag has no meaning in this mode as UDP is connectionless.
