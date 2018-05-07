@@ -88,8 +88,9 @@ You can delare a metric without making an observation by omitting the value.
 ```
 
 You can declare metrics at runtime, like this, or you can predeclare metrics in
-a JSON file, and pass it to the program at startup via the `-declfile` flag. Or
-mix and match both. What do I care? I'm just some stupid README file.
+a file containing a JSON array of multiple JSON objects, and pass it to the
+program at startup via the `-declfile` flag. Or mix and match both! Life is
+full of possibility.
 
 ## Prometheus exposition format
 
