@@ -1,3 +1,11 @@
+## v0.0.8
+
+- Add UDP support for incoming socket writes.
+
+## v0.0.7
+
+- Fixes a crashing bug if you don't specify an explicit -prometheus path.
+
 ## v0.0.6
 
 - Renamed -direct to -socket.
