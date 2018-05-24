@@ -85,9 +85,24 @@ func main() {
 			level.Error(logger).Log("socket", *sockAddr, "err", err)
 			os.Exit(1)
 		}
+
+		var address string
+
+		switch strings.ToLower(sockURL.Scheme) {
+		case "udp", "udp4", "udp6", "tcp", "tcp4", "tcp6":
+			address = sockURL.Host;
+
+		case "unix", "unixgram", "unipacket":
+			address = sockURL.Path;
+
+		default:
+			level.Error(logger).Log("socket", *sockAddr, "err", "unsupported network", "network", sockURL.Scheme)
+			os.Exit(1)
+		}
+
 		switch strings.ToLower(sockURL.Scheme) {
 		case "udp", "udp4", "udp6", "unixgram":
-			laddr, err := net.ResolveUDPAddr(sockURL.Scheme, sockURL.Host)
+			laddr, err := net.ResolveUDPAddr(sockURL.Scheme, address)
 			if err != nil {
 				level.Error(logger).Log("socket", *sockAddr, "err", err)
 				os.Exit(1)
@@ -101,17 +116,13 @@ func main() {
 			forwardClose = conn.Close
 
 		case "tcp", "tcp4", "tcp6", "unix", "unixpacket":
-			ln, err := net.Listen(sockURL.Scheme, sockURL.Host)
+			ln, err := net.Listen(sockURL.Scheme, address)
 			if err != nil {
 				level.Error(logger).Log("socket", *sockAddr, "err", err)
 				os.Exit(1)
 			}
 			forwardFunc = func() error { return forwardListener(ln, u, *strict, logger) }
 			forwardClose = ln.Close
-
-		default:
-			level.Error(logger).Log("socket", *sockAddr, "err", "unsupported network", "network", sockURL.Scheme)
-			os.Exit(1)
 		}
 	}
 
