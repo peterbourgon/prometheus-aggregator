@@ -85,9 +85,18 @@ func main() {
 			level.Error(logger).Log("socket", *sockAddr, "err", err)
 			os.Exit(1)
 		}
+
+		var network, address string
 		switch strings.ToLower(sockURL.Scheme) {
+		case "tcp", "tcp4", "tcp6", "udp", "udp4", "udp6":
+			network, address = sockURL.Scheme, sockURL.Host
+		case "unix", "unixpacket", "unixgram":
+			network, address = sockURL.Scheme, sockURL.Path
+		}
+
+		switch strings.ToLower(network) {
 		case "udp", "udp4", "udp6", "unixgram":
-			laddr, err := net.ResolveUDPAddr(sockURL.Scheme, sockURL.Host)
+			laddr, err := net.ResolveUDPAddr(network, address)
 			if err != nil {
 				level.Error(logger).Log("socket", *sockAddr, "err", err)
 				os.Exit(1)
@@ -101,7 +110,7 @@ func main() {
 			forwardClose = conn.Close
 
 		case "tcp", "tcp4", "tcp6", "unix", "unixpacket":
-			ln, err := net.Listen(sockURL.Scheme, sockURL.Host)
+			ln, err := net.Listen(network, address)
 			if err != nil {
 				level.Error(logger).Log("socket", *sockAddr, "err", err)
 				os.Exit(1)
