@@ -87,3 +87,62 @@ func TestParsePrometheus(t *testing.T) {
 		})
 	}
 }
+
+func TestParseURI(t *testing.T) {
+	for name, testcase := range map[string]struct {
+		input   string
+		network string
+		address string
+		path    string
+		err     bool
+	}{
+		"empty string": {
+			input: "",
+			err:   true,
+		},
+		"bad scheme": {
+			input: ":/localhost:1234/x",
+			err:   true,
+		},
+		"TCP with path": {
+			input:   "tcp://localhost:1234/x",
+			network: "tcp",
+			address: "localhost:1234",
+			path:    "/x",
+		},
+		"TCP4 without path": {
+			input:   "tcp4://localhost:1234",
+			network: "tcp4",
+			address: "localhost:1234",
+			path:    "",
+		},
+		"UNIX socket": {
+			input:   "unix:///var/tmp/my.sock",
+			network: "unix",
+			address: "/var/tmp/my.sock",
+			path:    "",
+		},
+		"UNIX socket with host": {
+			input:   "unix://ignored-host/var/tmp/my.sock",
+			network: "unix",
+			address: "/var/tmp/my.sock",
+			path:    "",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			network, address, path, err := parseURI(testcase.input)
+			if testcase.err && err == nil {
+				t.Fatal("wanted error, but got none")
+			}
+			if want, have := testcase.network, network; want != have {
+				t.Errorf("network: want %q, have %q", want, have)
+			}
+			if want, have := testcase.address, address; want != have {
+				t.Errorf("address: want %q, have %q", want, have)
+			}
+			if want, have := testcase.path, path; want != have {
+				t.Errorf("path: want %q, have %q", want, have)
+			}
+		})
+	}
+}

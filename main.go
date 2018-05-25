@@ -61,12 +61,12 @@ func main() {
 
 	var inln net.Listener
 	{
-		u, err := url.Parse(*inaddr)
+		address, network, _, err := parseURI(*inaddr)
 		if err != nil {
 			level.Error(logger).Log("in", *inaddr, "err", err)
 			os.Exit(1)
 		}
-		inln, err = net.Listen(u.Scheme, u.Host)
+		inln, err = net.Listen(address, network)
 		if err != nil {
 			level.Error(logger).Log("in", *inaddr, "err", err)
 			os.Exit(1)
@@ -76,17 +76,17 @@ func main() {
 	var outln net.Listener
 	var path string
 	{
-		u, err := url.Parse(*outaddr)
+		address, network, uripath, err := parseURI(*outaddr)
 		if err != nil {
 			level.Error(logger).Log("out", *outaddr, "err", err)
 			os.Exit(1)
 		}
-		outln, err = net.Listen(u.Scheme, u.Host)
+		outln, err = net.Listen(network, address)
 		if err != nil {
 			level.Error(logger).Log("out", *outaddr, "err", err)
 			os.Exit(1)
 		}
-		path = u.Path
+		path = uripath
 	}
 
 	var initial []observation
@@ -609,6 +609,25 @@ func sortLabelKeys(labels map[string]string) (keys []string) {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func parseURI(uri string) (network, address, path string, err error) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return network, address, path, errors.Wrap(err, "error parsing URI")
+	}
+
+	if u.Scheme == "" && (u.Host == "" || u.Path == "") {
+		return network, address, path, errors.Errorf("invalid URI %q", uri)
+	}
+
+	if scheme := strings.ToLower(u.Scheme); scheme == "unix" || scheme == "unixpacket" {
+		// Parsing "unix:///var/my.sock" gives Host="" Path="/var/my.sock",
+		// so we need to special-case this one.
+		return u.Scheme, u.Path, "", nil
+	}
+
+	return u.Scheme, u.Host, u.Path, nil
 }
 
 //
