@@ -1,3 +1,7 @@
+## v0.0.9
+
+- Fix bug when parsing UNIX domain sockets.
+
 ## v0.0.8
 
 - Add UDP support for incoming socket writes.
