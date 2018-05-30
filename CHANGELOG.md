@@ -1,3 +1,7 @@
+## v0.0.10
+
+- Make histograms abide the convention of using `_bucket` suffixes on the metric name.
+
 ## v0.0.9
 
 - Fix bug when parsing UNIX domain sockets.
