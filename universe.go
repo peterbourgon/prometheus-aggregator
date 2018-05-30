@@ -308,10 +308,10 @@ func (h *histogram) renderText() string {
 		}
 		for _, b := range h.buckets {
 			labelscopy["le"] = fmt.Sprint(b.max)
-			fmt.Fprintf(&sb, "%s%s %d\n", h.n, renderLabels(labelscopy), b.count)
+			fmt.Fprintf(&sb, "%s_bucket%s %d\n", h.n, renderLabels(labelscopy), b.count)
 		}
 		labelscopy["le"] = "+Inf"
-		fmt.Fprintf(&sb, "%s%s %d\n", h.n, renderLabels(labelscopy), h.count)
+		fmt.Fprintf(&sb, "%s_bucket%s %d\n", h.n, renderLabels(labelscopy), h.count)
 	}
 	{
 		// Render the aggregate statistics.

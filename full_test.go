@@ -30,15 +30,15 @@ func TestThreeTypes(t *testing.T) {
 	if want, have := normalizeResponse(`
 		# HELP bar_seconds Bar duration in seconds.
 		# TYPE bar_seconds histogram
-		bar_seconds{le="0.01"} 0
-		bar_seconds{le="0.05"} 0
-		bar_seconds{le="0.1"} 0
-		bar_seconds{le="0.5"} 2
-		bar_seconds{le="1"} 3
-		bar_seconds{le="2"} 3
-		bar_seconds{le="5"} 3
-		bar_seconds{le="10"} 4
-		bar_seconds{le="+Inf"} 4
+		bar_seconds_bucket{le="0.01"} 0
+		bar_seconds_bucket{le="0.05"} 0
+		bar_seconds_bucket{le="0.1"} 0
+		bar_seconds_bucket{le="0.5"} 2
+		bar_seconds_bucket{le="1"} 3
+		bar_seconds_bucket{le="2"} 3
+		bar_seconds_bucket{le="5"} 3
+		bar_seconds_bucket{le="10"} 4
+		bar_seconds_bucket{le="+Inf"} 4
 		bar_seconds_sum{} 8.858000
 		bar_seconds_count{} 4
 		
@@ -70,15 +70,15 @@ func TestInitialDeclarations(t *testing.T) {
 	if want, have := normalizeResponse(`
 		# HELP bar_seconds Bar duration in seconds.
 		# TYPE bar_seconds histogram
-		bar_seconds{le="0.01"} 0
-		bar_seconds{le="0.05"} 0
-		bar_seconds{le="0.1"} 0
-		bar_seconds{le="0.5"} 1
-		bar_seconds{le="1"} 1
-		bar_seconds{le="2"} 1
-		bar_seconds{le="5"} 1
-		bar_seconds{le="10"} 1
-		bar_seconds{le="+Inf"} 1
+		bar_seconds_bucket{le="0.01"} 0
+		bar_seconds_bucket{le="0.05"} 0
+		bar_seconds_bucket{le="0.1"} 0
+		bar_seconds_bucket{le="0.5"} 1
+		bar_seconds_bucket{le="1"} 1
+		bar_seconds_bucket{le="2"} 1
+		bar_seconds_bucket{le="5"} 1
+		bar_seconds_bucket{le="10"} 1
+		bar_seconds_bucket{le="+Inf"} 1
 		bar_seconds_sum{} 0.234000
 		bar_seconds_count{} 1
 		
