@@ -50,7 +50,6 @@ func TestThreeTypes(t *testing.T) {
 		# TYPE foo_total counter
 		foo_total{code="200"} 5.000000
 		foo_total{code="404"} 10.000000
-		foo_total{} 0.000000
 	`), normalizeResponse(scrape(t, u)); want != have {
 		t.Fatalf("\n---WANT---\n%s\n\n---HAVE---\n%s\n", want, have)
 	}
@@ -61,9 +60,10 @@ func TestInitialDeclarations(t *testing.T) {
 		`{"name":"foo_total","type":"counter","help":"Total number of foos."}`,
 		`{"name":"bar_seconds","type":"histogram","help":"Bar duration in seconds.","buckets":[0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10]}`,
 		`{"name":"baz_size","type":"gauge","help":"Current size of baz widget."}`,
+		`{"name":"qux_count","type":"counter","help":"Count of qux events."}`,
 	})...)
 	loadObservations(t, u, makeObservations(t, []string{
-		`foo_total{} 1`,
+		`foo_total{label="value"} 1`,
 		`bar_seconds{} 0.234`,
 		`baz_size{} 5`,
 	}))
@@ -88,7 +88,7 @@ func TestInitialDeclarations(t *testing.T) {
 		
 		# HELP foo_total Total number of foos.
 		# TYPE foo_total counter
-		foo_total{} 1.000000
+		foo_total{label="value"} 1.000000
 	`), normalizeResponse(scrape(t, u)); want != have {
 		t.Fatalf("\n---WANT---\n%s\n\n---HAVE---\n%s\n", want, have)
 	}
