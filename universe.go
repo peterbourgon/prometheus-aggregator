@@ -40,6 +40,7 @@ type (
 	timeseriesValue interface {
 		metricName() metricName
 		timeseriesKey() timeseriesKey
+		touched() bool
 		observe(observation) error
 		renderText() string
 	}
@@ -88,6 +89,18 @@ func newTimeseriesCollection(typ, help string, buckets []float64) (*timeseriesCo
 	}, nil
 }
 
+// touched should return true if any timeseries in the collection
+// has been touched. It's used to determine if we should render
+// the header stanza in the /metrics output.
+func (c *timeseriesCollection) touched() bool {
+	for _, v := range c.values {
+		if v.touched() {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *timeseriesCollection) observe(o observation) error {
 	o.Type, o.Help, o.Buckets = c.typ, c.help, c.buckets // first writer wins
 	k := o.timeseriesKey()
@@ -127,10 +140,16 @@ func (u *universe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		u.mtx.Lock()
 		for _, n := range sortMetricNames(u.collections) {
 			c := u.collections[n]
+			if !c.touched() {
+				continue
+			}
 			fmt.Fprintf(&buf, "# HELP %s %s\n", n, c.help)
 			fmt.Fprintf(&buf, "# TYPE %s %s\n", n, c.typ)
 			for _, k := range sortTimeseriesKeys(c.values) {
 				v := c.values[k]
+				if !v.touched() {
+					continue
+				}
 				fmt.Fprintf(&buf, v.renderText())
 			}
 			fmt.Fprintln(&buf)
@@ -184,6 +203,7 @@ type counter struct {
 	n      string
 	h      string
 	labels map[string]string
+	touch  bool
 	value  float64
 }
 
@@ -202,9 +222,12 @@ func (c *counter) observe(o observation) error {
 	if o.Value == nil {
 		return nil // declaration
 	}
+	c.touch = true
 	c.value += *o.Value
 	return nil
 }
+
+func (c *counter) touched() bool { return c.touch }
 
 func (c *counter) renderText() string {
 	return fmt.Sprintf("%s%s %f\n", c.n, renderLabels(c.labels), c.value)
@@ -218,6 +241,7 @@ type gauge struct {
 	n      string
 	h      string
 	labels map[string]string
+	touch  bool
 	value  float64
 }
 
@@ -242,8 +266,11 @@ func (g *gauge) observe(o observation) error {
 	default:
 		g.value = *o.Value
 	}
+	g.touch = true
 	return nil
 }
+
+func (g *gauge) touched() bool { return g.touch }
 
 func (g *gauge) renderText() string {
 	return fmt.Sprintf("%s%s %f\n", g.n, renderLabels(g.labels), g.value)
@@ -296,6 +323,8 @@ func (h *histogram) observe(o observation) error {
 	}
 	return nil
 }
+
+func (h *histogram) touched() bool { return h.count > 0 }
 
 func (h *histogram) renderText() string {
 	var sb strings.Builder
