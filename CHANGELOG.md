@@ -1,3 +1,7 @@
+## v0.0.11
+
+- Bug fix: don't render timeseries that haven't collected any observations.
+
 ## v0.0.10
 
 - Make histograms abide the convention of using `_bucket` suffixes on the metric name.
