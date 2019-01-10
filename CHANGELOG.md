@@ -1,3 +1,7 @@
+## v0.0.12
+
+- A typo in an error message when parsing Prometheus exposition format lines has been corrected.
+
 ## v0.0.11
 
 - Bug fix: don't render timeseries that haven't collected any observations.
