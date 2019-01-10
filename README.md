@@ -53,7 +53,7 @@ FLAGS
   -strict false                             disconnect clients when they send bad data
 
 VERSION
-  0.0.6
+  0.0.12
 ```
 
 ## How it works
