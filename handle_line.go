@@ -104,7 +104,7 @@ func prometheusUnmarshal(p []byte, o *observation) error {
 
 	name, labels := id[:y], id[y+1:len(id)-1]
 	if bytes.ContainsRune(labels, ' ') {
-		return fmt.Errorf("bad format: ")
+		return fmt.Errorf("bad format: labels section may not contain spaces")
 	}
 
 	labelmap := map[string]string{}
