@@ -1,3 +1,10 @@
+## v0.0.13
+
+- First tagged version that is modules-aware
+- Stop vendoring dependencies
+- Switch to GitHub Actions for CI
+- Minor fixes to satisfy new static analysis tools
+
 ## v0.0.12
 
 - A typo in an error message when parsing Prometheus exposition format lines has been corrected.
