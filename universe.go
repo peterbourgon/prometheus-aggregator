@@ -150,7 +150,7 @@ func (u *universe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if !v.touched() {
 					continue
 				}
-				fmt.Fprintf(&buf, v.renderText())
+				fmt.Fprint(&buf, v.renderText())
 			}
 			fmt.Fprintln(&buf)
 		}
