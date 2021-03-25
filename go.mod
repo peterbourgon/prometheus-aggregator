@@ -1,6 +1,6 @@
 module github.com/peterbourgon/prometheus-aggregator
 
-go 1.12
+go 1.16
 
 require (
 	github.com/go-kit/kit v0.6.0
