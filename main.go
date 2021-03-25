@@ -89,9 +89,9 @@ func main() {
 		var address string
 		switch strings.ToLower(sockURL.Scheme) {
 		case "udp", "udp4", "udp6", "tcp", "tcp4", "tcp6":
-			address = sockURL.Host;
+			address = sockURL.Host
 		case "unix", "unixgram", "unipacket":
-			address = sockURL.Path;
+			address = sockURL.Path
 		default:
 			level.Error(logger).Log("socket", *sockAddr, "err", "unsupported network", "network", sockURL.Scheme)
 			os.Exit(1)

@@ -25,7 +25,7 @@ jobs:
       uses: actions/checkout@v1
     - name: Fmt
       if: matrix.platform != 'windows-latest' # :(
-      run: "F=$(gofmt -l .) ; if [[ $F ]] ; then echo $F ; exit 1 ; fi"
+      run: "diff <(gofmt -d .) <(printf '')"
       shell: bash
     - name: Vet
       run: go vet ./...
