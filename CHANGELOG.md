@@ -1,13 +1,13 @@
 ## v0.0.14
 
-- Add `-declpath` flag
+- Add `-declpath` flag.
 
 ## v0.0.13
 
-- First tagged version that is modules-aware
-- Stop vendoring dependencies
-- Switch to GitHub Actions for CI
-- Minor fixes to satisfy new static analysis tools
+- First tagged version that is modules-aware.
+- Stop vendoring dependencies.
+- Switch to GitHub Actions for CI.
+- Minor fixes to satisfy new static analysis tools.
 
 ## v0.0.12
 
