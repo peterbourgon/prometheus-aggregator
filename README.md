@@ -1,4 +1,4 @@
-# Prometheus metrics aggregator [![Latest Release](https://img.shields.io/github/release/peterbourgon/prometheus-aggregator.svg?style=flat-square)](https://github.com/peterbourgon/prometheus-aggregator/releases/latest) [![Travis CI](https://travis-ci.org/peterbourgon/prometheus-aggregator.svg?branch=master)](https://travis-ci.org/peterbourgon/prometheus-aggregator) 
+# Prometheus metrics aggregator [![Latest Release](https://img.shields.io/github/release/peterbourgon/prometheus-aggregator.svg?style=flat-square)](https://github.com/peterbourgon/prometheus-aggregator/releases/latest) [![Build Status](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Factions-badge.atrox.dev%2Fpeterbourgon%2Fprometheus-aggregator%2Fbadge&style=flat-square&label=build)](https://github.com/peterbourgon/prometheus-aggregator/actions?query=workflow%3ATest)
 
 Receive and aggregate metrics for consumption by a Prometheus server.
 
@@ -47,13 +47,14 @@ USAGE
 FLAGS
   -debug false                              log debug information
   -declfile ...                             file containing JSON metric declarations
+  -declpath ...                             sibling path to /metrics serving initial metric declarations
   -example false                            print example declfile to stdout and return
   -prometheus tcp://127.0.0.1:8192/metrics  address for Prometheus scrapes
   -socket tcp://127.0.0.1:8191              address for direct socket metric writes
   -strict false                             disconnect clients when they send bad data
 
 VERSION
-  0.0.12
+  0.0.14
 ```
 
 ## How it works
@@ -91,6 +92,11 @@ You can declare metrics at runtime, like this, or you can predeclare metrics in
 a file containing a JSON array of multiple JSON objects, and pass it to the
 program at startup via the `-declfile` flag. Or mix and match both! Life is
 full of possibility.
+
+New! Exciting! Great Value! An optional `-declpath` flag allows you to serve
+your initial metric declarations on a sibling path to your Prometheus metrics
+telemetry. This can be useful if you want to programmatically verify the state
+of a prometheus-aggregator instance.
 
 ## Prometheus exposition format
 
@@ -131,7 +137,7 @@ Histograms are supported too. Provide buckets with the declaration.
 
 ```
 {"name": "myapp_req_dur_seconds", "type": "histogram",
-  "help": "Duration of request in seconds.", 
+  "help": "Duration of request in seconds.",
     "buckets": [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10]}
 myapp_req_dur_seconds{} 0.0123
 myapp_req_dur_seconds{} 0.99

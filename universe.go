@@ -32,7 +32,8 @@ type (
 		values  map[timeseriesKey]timeseriesValue
 	}
 
-	// timeseriesKey is universally unique e.g. `http_requests_total{method="GET",status_code="200"}`.
+	// timeseriesKey is universally unique, e.g.
+	// `http_requests_total{method="GET",status_code="200"}`.
 	timeseriesKey string
 
 	// timeseriesValue is a set of observations for
@@ -192,8 +193,13 @@ type observation struct {
 	Value   *float64          `json:"value,omitempty"`
 }
 
-func (o observation) metricName() metricName       { return metricName(o.Name) }
-func (o observation) timeseriesKey() timeseriesKey { return makeTimeseriesKey(o.Name, o.Labels) }
+func (o observation) metricName() metricName {
+	return metricName(o.Name)
+}
+
+func (o observation) timeseriesKey() timeseriesKey {
+	return makeTimeseriesKey(o.Name, o.Labels)
+}
 
 //
 //
@@ -215,8 +221,13 @@ func newCounter(o observation) (*counter, error) {
 	}, nil
 }
 
-func (c *counter) metricName() metricName       { return metricName(c.n) }
-func (c *counter) timeseriesKey() timeseriesKey { return makeTimeseriesKey(c.n, c.labels) }
+func (c *counter) metricName() metricName {
+	return metricName(c.n)
+}
+
+func (c *counter) timeseriesKey() timeseriesKey {
+	return makeTimeseriesKey(c.n, c.labels)
+}
 
 func (c *counter) observe(o observation) error {
 	if o.Value == nil {
@@ -253,8 +264,13 @@ func newGauge(o observation) (*gauge, error) {
 	}, nil
 }
 
-func (g *gauge) metricName() metricName       { return metricName(g.n) }
-func (g *gauge) timeseriesKey() timeseriesKey { return makeTimeseriesKey(g.n, g.labels) }
+func (g *gauge) metricName() metricName {
+	return metricName(g.n)
+}
+
+func (g *gauge) timeseriesKey() timeseriesKey {
+	return makeTimeseriesKey(g.n, g.labels)
+}
 
 func (g *gauge) observe(o observation) error {
 	if o.Value == nil {
@@ -307,8 +323,13 @@ func newHistogram(o observation) (*histogram, error) {
 	}, nil
 }
 
-func (h *histogram) metricName() metricName       { return metricName(h.n) }
-func (h *histogram) timeseriesKey() timeseriesKey { return makeTimeseriesKey(h.n, h.labels) }
+func (h *histogram) metricName() metricName {
+	return metricName(h.n)
+}
+
+func (h *histogram) timeseriesKey() timeseriesKey {
+	return makeTimeseriesKey(h.n, h.labels)
+}
 
 func (h *histogram) observe(o observation) error {
 	if o.Value == nil {
