@@ -1,3 +1,7 @@
+## v0.0.14
+
+- Add `-declpath` flag
+
 ## v0.0.13
 
 - First tagged version that is modules-aware
