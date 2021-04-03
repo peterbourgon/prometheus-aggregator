@@ -1,4 +1,4 @@
-# Prometheus metrics aggregator [![Latest Release](https://img.shields.io/github/release/peterbourgon/prometheus-aggregator.svg?style=flat-square)](https://github.com/peterbourgon/prometheus-aggregator/releases/latest) [![Build Status](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Factions-badge.atrox.dev%2Fpeterbourgon%2Fprometheus-aggregator%2Fbadge&style=flat-square&label=build)](https://github.com/peterbourgon/prometheus-aggregator/actions?query=workflow%3ATest)
+# Prometheus metrics aggregator [![Latest Release](https://img.shields.io/github/release/peterbourgon/prometheus-aggregator.svg?style=flat-square)](https://github.com/peterbourgon/prometheus-aggregator/releases/latest) [![Build Status](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Factions-badge.atrox.dev%2Fpeterbourgon%2Fprometheus-aggregator%2Fbadge%3Fref%3Dmain&style=flat)](https://actions-badge.atrox.dev/peterbourgon/prometheus-aggregator/goto?ref=main)
 
 Receive and aggregate metrics for consumption by a Prometheus server.
 
