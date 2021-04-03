@@ -29,6 +29,7 @@ func main() {
 		sockAddr = fs.String("socket", "tcp://127.0.0.1:8191", "address for direct socket metric writes")
 		promAddr = fs.String("prometheus", "tcp://127.0.0.1:8192/metrics", "address for Prometheus scrapes")
 		declfile = fs.String("declfile", "", "file containing JSON metric declarations")
+		declpath = fs.String("declpath", "", "sibling path to /metrics serving initial metric declarations")
 		example  = fs.Bool("example", false, "print example declfile to stdout and return")
 		debug    = fs.Bool("debug", false, "log debug information")
 		strict   = fs.Bool("strict", false, "disconnect clients when they send bad data")
@@ -77,6 +78,7 @@ func main() {
 		}
 	}
 
+	var socketLn net.Listener
 	var forwardFunc func() error
 	var forwardClose func() error
 	{
@@ -118,34 +120,56 @@ func main() {
 				level.Error(logger).Log("socket", *sockAddr, "err", err)
 				os.Exit(1)
 			}
+			socketLn = ln
 			forwardFunc = func() error { return forwardListener(ln, u, *strict, logger) }
 			forwardClose = ln.Close
 		}
 	}
 
-	var promLn net.Listener
-	var promPath string
+	var metricsLn net.Listener
+	var metricsPath string
 	{
 		u, err := url.Parse(*promAddr)
 		if err != nil {
 			level.Error(logger).Log("prometheus", *promAddr, "err", err)
 			os.Exit(1)
 		}
-		promLn, err = net.Listen(u.Scheme, u.Host)
+		metricsLn, err = net.Listen(u.Scheme, u.Host)
 		if err != nil {
 			level.Error(logger).Log("prometheus", *promAddr, "err", err)
 			os.Exit(1)
 		}
-		promPath = u.Path
-		if promPath == "" {
-			promPath = "/"
+		metricsPath = u.Path
+		if metricsPath == "" {
+			metricsPath = "/"
+		}
+	}
+
+	var declPath string
+	var declHandler http.Handler
+	{
+		if *declpath != "" {
+			*declpath = "/" + strings.Trim(*declpath, "/ ")
+			scheme := metricsLn.Addr().Network()
+			hostport := metricsLn.Addr().String()
+			u, err := url.Parse(scheme + "://" + hostport + *declpath)
+			if err != nil {
+				level.Error(logger).Log("declpath", *declpath, "err", err)
+				os.Exit(1)
+			}
+			declPath = u.Path
+			declHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("content-type", "application/json; charset=utf-8")
+				p, _ := json.MarshalIndent(initial, "", "    ")
+				w.Write(p)
+			})
 		}
 	}
 
 	var g run.Group
 	{
 		g.Add(func() error {
-			level.Info(logger).Log("listener", "socket_writes", "addr", *sockAddr)
+			level.Info(logger).Log("listener", "socket_writes", "network", socketLn.Addr().Network(), "address", socketLn.Addr().String())
 			return forwardFunc()
 		}, func(error) {
 			forwardClose()
@@ -153,11 +177,18 @@ func main() {
 	}
 	{
 		mux := http.NewServeMux()
-		mux.Handle(promPath, u)
+		mux.Handle(metricsPath, u)
+		if declPath != "" {
+			mux.Handle(declPath, declHandler)
+		}
 		server := http.Server{Handler: mux}
 		g.Add(func() error {
-			level.Info(logger).Log("listener", "prometheus_scrapes", "addr", promLn.Addr().String(), "path", promPath)
-			return server.Serve(promLn)
+			keyvals := []interface{}{"listener", "prometheus_scrapes", "network", metricsLn.Addr().Network(), "address", metricsLn.Addr().String(), "path", metricsPath}
+			if declPath != "" {
+				keyvals = append(keyvals, "declarations", declPath)
+			}
+			level.Info(logger).Log(keyvals...)
+			return server.Serve(metricsLn)
 		}, func(error) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
