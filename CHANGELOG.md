@@ -1,3 +1,7 @@
+## v0.0.15
+
+- Fix crashing bug with UDP -socket addresses.
+
 ## v0.0.14
 
 - Add `-declpath` flag.
