@@ -29,7 +29,7 @@ func main() {
 		sockAddr = fs.String("socket", "tcp://127.0.0.1:8191", "address for direct socket metric writes")
 		promAddr = fs.String("prometheus", "tcp://127.0.0.1:8192/metrics", "address for Prometheus scrapes")
 		declfile = fs.String("declfile", "", "file containing JSON metric declarations")
-		declpath = fs.String("declpath", "", "sibling path to /metrics serving initial metric declarations")
+		declpath = fs.String("declpath", "", "sibling path to /metrics serving declfile contents")
 		example  = fs.Bool("example", false, "print example declfile to stdout and return")
 		debug    = fs.Bool("debug", false, "log debug information")
 		strict   = fs.Bool("strict", false, "disconnect clients when they send bad data")
@@ -157,10 +157,14 @@ func main() {
 				os.Exit(1)
 			}
 			declPath = u.Path
+			response, err := json.MarshalIndent(initial, "", "    ")
+			if err != nil {
+				level.Error(logger).Log("declpath", *declpath, "during", "marshal of initial declarations", "err", err)
+				os.Exit(1)
+			}
 			declHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("content-type", "application/json; charset=utf-8")
-				p, _ := json.MarshalIndent(initial, "", "    ")
-				w.Write(p)
+				w.Write(response)
 			})
 		}
 	}

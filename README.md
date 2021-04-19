@@ -47,14 +47,14 @@ USAGE
 FLAGS
   -debug false                              log debug information
   -declfile ...                             file containing JSON metric declarations
-  -declpath ...                             sibling path to /metrics serving initial metric declarations
+  -declpath ...                             sibling path to /metrics serving declfile contents
   -example false                            print example declfile to stdout and return
   -prometheus tcp://127.0.0.1:8192/metrics  address for Prometheus scrapes
   -socket tcp://127.0.0.1:8191              address for direct socket metric writes
   -strict false                             disconnect clients when they send bad data
 
 VERSION
-  0.0.14
+  0.0.15
 ```
 
 ## How it works
